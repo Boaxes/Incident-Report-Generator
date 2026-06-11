@@ -4,6 +4,10 @@ Guards write their own accounts of the same security incident; this tool produce
 supervisor-ready report — a summary of what happened, a list of likely-missing details to
 follow up on, and the points where the accounts conflict. The report exports to PDF.
 
+**Live demo:** https://incident-ui-328698967588.us-central1.run.app
+(Pick one of the four built-in sample incidents and click **Generate report** — no setup
+needed.)
+
 ## Stack
 
 - **Streamlit** UI (one page) — calls the API only.
@@ -41,3 +45,45 @@ verification discards candidates, detection runs again told not to re-propose th
 
 Two Cloud Run services (api, ui) plus Cloud SQL for Postgres, with the OpenAI key in
 Secret Manager. Cloud Run scales to zero; stop the Cloud SQL instance when not demoing.
+
+Current deployment (project `project-d481c97a-382d-4d71-9f4`, region `us-central1`):
+
+- API: https://incident-api-328698967588.us-central1.run.app
+- UI:  https://incident-ui-328698967588.us-central1.run.app
+- Cloud SQL instance `incident-db`, database `incidents`
+- Secret Manager: `openai-api-key`, `db-password`
+
+## Continuous deployment (GitHub Actions)
+
+`.github/workflows/deploy.yml` redeploys both services on every push to `main`. Wire it
+up by adding these to the GitHub repository:
+
+Repository **Variables**:
+
+- `GCP_PROJECT` = `project-d481c97a-382d-4d71-9f4`
+- `GCP_REGION` = `us-central1`
+- `CLOUD_SQL_CONNECTION` = `project-d481c97a-382d-4d71-9f4:us-central1:incident-db`
+- `DB_NAME` = `incidents`
+- `DB_USER` = `postgres`
+
+Repository **Secrets**:
+
+- `GCP_SA_KEY` = JSON key of a service account with roles: Cloud Run Admin, Cloud Build
+  Editor, Service Account User, Artifact Registry Writer, Secret Manager Secret Accessor.
+
+The OpenAI key and DB password are read from Secret Manager (`openai-api-key`,
+`db-password`) — they are never stored in GitHub.
+
+## Operations
+
+Stop Cloud SQL when not demoing (it does not scale to zero):
+
+```
+gcloud sql instances patch incident-db --activation-policy NEVER
+```
+
+Start it again before a demo:
+
+```
+gcloud sql instances patch incident-db --activation-policy ALWAYS
+```
