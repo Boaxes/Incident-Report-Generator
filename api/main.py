@@ -123,11 +123,13 @@ def get_incident(incident_id: int):
 @app.get("/incidents/{incident_id}/pdf")
 def get_incident_pdf(incident_id: int):
     with get_connection() as conn, conn.cursor() as cur:
-        cur.execute("SELECT title FROM incidents WHERE id = %s", (incident_id,))
+        cur.execute("SELECT title, created_at FROM incidents WHERE id = %s", (incident_id,))
         row = cur.fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail="Incident not found")
-        title = row[0]
+        title, created_at = row
+        cur.execute("SELECT count(*) FROM reports WHERE incident_id = %s", (incident_id,))
+        account_count = cur.fetchone()[0]
         cur.execute(
             "SELECT summary, omissions, conflicts FROM results WHERE incident_id = %s "
             "ORDER BY id DESC LIMIT 1",
@@ -137,7 +139,15 @@ def get_incident_pdf(incident_id: int):
     if result is None:
         raise HTTPException(status_code=404, detail="Result not found")
     summary, omissions, conflicts = result
-    pdf_bytes = build_pdf(title, summary, omissions, conflicts)
+    pdf_bytes = build_pdf(
+        title,
+        summary,
+        omissions,
+        conflicts,
+        incident_id=incident_id,
+        created_at=created_at.strftime("%b %d, %Y") if created_at else None,
+        account_count=account_count,
+    )
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",

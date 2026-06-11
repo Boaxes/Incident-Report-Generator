@@ -46,31 +46,6 @@ def format_date(value):
         return value
 
 
-def render_report(data):
-    st.header("Summary")
-    st.write(data["summary"])
-
-    st.header("Follow-ups: likely missing information")
-    if data["omissions"]:
-        for item in data["omissions"]:
-            note = item.get("note", "")
-            st.markdown(f"- **{item.get('dimension', '')}**" + (f": {note}" if note else ""))
-    else:
-        st.write("The reports covered all of the standard incident details.")
-
-    st.header("Conflicts")
-    st.caption("These are points for the team to review, not findings of wrongdoing.")
-    if data["conflicts"]:
-        for conflict in data["conflicts"]:
-            st.subheader(conflict.get("topic", ""))
-            if conflict.get("explanation"):
-                st.write(conflict["explanation"])
-            for claim in conflict.get("claims", []):
-                st.markdown(f'> **{claim.get("label", "")}:** "{claim.get("quote", "")}"')
-    else:
-        st.write("No genuine conflicts were found between the reports.")
-
-
 def dashboard():
     left, right = st.columns([6, 1])
     with left:
@@ -127,24 +102,25 @@ def detail():
     data = response.json()
     st.title(data["title"] or "Untitled incident")
 
-    with st.expander("Guard accounts"):
-        for report in data["reports"]:
-            st.markdown(f"**{report['label']}**")
-            st.write(report["body"])
-
-    render_report(data)
-
     try:
         pdf_response = httpx.get(f"{API_URL}/incidents/{incident_id}/pdf", timeout=60)
     except Exception:
         pdf_response = None
     if pdf_response is not None and pdf_response.status_code == 200:
         st.download_button(
-            "Download PDF",
+            "⬇ Download report PDF",
             data=pdf_response.content,
             file_name=f"incident_{incident_id}.pdf",
             mime="application/pdf",
+            type="primary",
         )
+    else:
+        st.error("Report PDF is not available yet.")
+
+    st.subheader("Guard accounts")
+    for report in data["reports"]:
+        with st.expander(report["label"]):
+            st.write(report["body"])
 
 
 def new_incident():
