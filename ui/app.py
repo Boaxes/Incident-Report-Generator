@@ -19,11 +19,13 @@ if "guard_count" not in st.session_state:
 def go_list():
     st.session_state.view = "list"
     st.session_state.selected_id = None
+    st.session_state.pop("confirm_delete", None)
 
 
 def go_detail(incident_id):
     st.session_state.view = "detail"
     st.session_state.selected_id = incident_id
+    st.session_state.pop("confirm_delete", None)
 
 
 def go_new():
@@ -98,37 +100,13 @@ def dashboard():
                 st.caption(f"Incident #{seq}  ·  Created {format_date(inc['created_at'])}")
             with action:
                 st.write("")
-                inc_id = inc["incident_id"]
-                if st.session_state.get("confirm_delete") == inc_id:
-                    st.button(
-                        "Confirm delete",
-                        key=f"confirmdel_{inc_id}",
-                        on_click=delete_incident,
-                        args=(inc_id,),
-                        type="primary",
-                        use_container_width=True,
-                    )
-                    st.button(
-                        "Cancel",
-                        key=f"canceldel_{inc_id}",
-                        on_click=cancel_delete,
-                        use_container_width=True,
-                    )
-                else:
-                    st.button(
-                        "Open",
-                        key=f"open_{inc_id}",
-                        on_click=go_detail,
-                        args=(inc_id,),
-                        use_container_width=True,
-                    )
-                    st.button(
-                        "Delete",
-                        key=f"del_{inc_id}",
-                        on_click=ask_delete,
-                        args=(inc_id,),
-                        use_container_width=True,
-                    )
+                st.button(
+                    "Open",
+                    key=f"open_{inc['incident_id']}",
+                    on_click=go_detail,
+                    args=(inc["incident_id"],),
+                    use_container_width=True,
+                )
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -182,6 +160,21 @@ def detail():
         )
     else:
         st.error("Report PDF is not available yet.")
+
+    st.divider()
+    if st.session_state.get("confirm_delete") == incident_id:
+        st.warning("Delete this incident permanently? This cannot be undone.")
+        c1, c2, _ = st.columns([1, 1, 4])
+        c1.button(
+            "Confirm delete",
+            on_click=delete_incident,
+            args=(incident_id,),
+            type="primary",
+            use_container_width=True,
+        )
+        c2.button("Cancel", on_click=cancel_delete, use_container_width=True)
+    else:
+        st.button("Delete incident", on_click=ask_delete, args=(incident_id,))
 
 
 def new_incident():
