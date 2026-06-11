@@ -39,6 +39,28 @@ def add_guard():
     st.session_state.guard_count += 1
 
 
+def ask_delete(incident_id):
+    st.session_state.confirm_delete = incident_id
+
+
+def cancel_delete():
+    st.session_state.pop("confirm_delete", None)
+
+
+def delete_incident(incident_id):
+    try:
+        httpx.delete(f"{API_URL}/incidents/{incident_id}", timeout=30)
+    except Exception:
+        st.session_state.delete_error = True
+        return
+    # Drop cached detail/PDF for the removed incident and return to the list.
+    fetch_incident.clear()
+    fetch_pdf.clear()
+    st.session_state.pop("confirm_delete", None)
+    if st.session_state.get("selected_id") == incident_id:
+        go_list()
+
+
 def format_date(value):
     try:
         return datetime.fromisoformat(value).strftime("%b %d, %Y at %I:%M %p")
@@ -76,13 +98,37 @@ def dashboard():
                 st.caption(f"Incident #{seq}  ·  Created {format_date(inc['created_at'])}")
             with action:
                 st.write("")
-                st.button(
-                    "Open",
-                    key=f"open_{inc['incident_id']}",
-                    on_click=go_detail,
-                    args=(inc["incident_id"],),
-                    use_container_width=True,
-                )
+                inc_id = inc["incident_id"]
+                if st.session_state.get("confirm_delete") == inc_id:
+                    st.button(
+                        "Confirm delete",
+                        key=f"confirmdel_{inc_id}",
+                        on_click=delete_incident,
+                        args=(inc_id,),
+                        type="primary",
+                        use_container_width=True,
+                    )
+                    st.button(
+                        "Cancel",
+                        key=f"canceldel_{inc_id}",
+                        on_click=cancel_delete,
+                        use_container_width=True,
+                    )
+                else:
+                    st.button(
+                        "Open",
+                        key=f"open_{inc_id}",
+                        on_click=go_detail,
+                        args=(inc_id,),
+                        use_container_width=True,
+                    )
+                    st.button(
+                        "Delete",
+                        key=f"del_{inc_id}",
+                        on_click=ask_delete,
+                        args=(inc_id,),
+                        use_container_width=True,
+                    )
 
 
 @st.cache_data(ttl=300, show_spinner=False)

@@ -165,3 +165,17 @@ def get_incident_pdf(incident_id: int):
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="incident_{incident_id}.pdf"'},
     )
+
+
+@app.delete("/incidents/{incident_id}", status_code=204)
+def delete_incident(incident_id: int):
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute("SELECT 1 FROM incidents WHERE id = %s", (incident_id,))
+        if cur.fetchone() is None:
+            raise HTTPException(status_code=404, detail="Incident not found")
+        # No ON DELETE CASCADE on the schema, so clear the child rows first.
+        cur.execute("DELETE FROM results WHERE incident_id = %s", (incident_id,))
+        cur.execute("DELETE FROM reports WHERE incident_id = %s", (incident_id,))
+        cur.execute("DELETE FROM incidents WHERE id = %s", (incident_id,))
+        conn.commit()
+    return Response(status_code=204)

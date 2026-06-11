@@ -17,15 +17,15 @@ CATEGORY_STYLE = {
 }
 
 
-def resolve_category(dimension):
-    """Map a returned dimension to (label, color). Tolerates a stray label string."""
+def omission_key(dimension):
+    """Canonicalize a returned dimension to one of the six category keys, or None."""
     key = (dimension or "").strip().lower()
     if key in CATEGORY_STYLE:
-        return CATEGORY_STYLE[key]
-    for label, color in CATEGORY_STYLE.values():
+        return key
+    for k, (label, _color) in CATEGORY_STYLE.items():
         if label.lower() == key:
-            return (label, color)
-    return (escape(dimension or "").upper() or "OTHER", "#555555")
+            return k
+    return None
 
 
 STYLE = """
@@ -155,8 +155,15 @@ ul.followups .dim {
     font-weight: 700;
     font-size: 9.5pt;
     letter-spacing: 0.6px;
-    margin-bottom: 3px;
 }
+ul.followups li.missing .dim { margin-bottom: 3px; }
+ul.followups li.covered {
+    background: #fafafa;
+    padding-top: 7px;
+    padding-bottom: 7px;
+}
+/* A covered category is left blank; de-emphasize it so the gaps stand out. */
+ul.followups li.covered .dim { opacity: 0.5; }
 ul.followups .note { display: block; color: #2a3342; }
 .allgood { color: #4a5566; font-style: italic; }
 
@@ -224,20 +231,28 @@ def build_pdf(title, summary, omissions, conflicts, incident_id=None, created_at
 
     summary_html = _paragraphs(summary) or "<p>No summary available.</p>"
 
-    if omissions:
-        items = []
-        for item in omissions:
-            label, color = resolve_category(item.get("dimension", ""))
-            note = escape(item.get("note", ""))
-            note_html = f'<span class="note">{note}</span>' if note else ""
-            items.append(
-                f'<li style="border-left-color: {color};">'
-                f'<span class="dim" style="color: {color};">{label}</span>'
-                f'{note_html}</li>'
-            )
-        followups_html = '<ul class="followups">' + "".join(items) + "</ul>"
-    else:
-        followups_html = '<p class="allgood">The reports covered all of the standard incident details.</p>'
+    # Always show all six categories in fixed order; a category the reports covered is
+    # left blank, a category nothing covered carries its follow-up note.
+    notes_by_key = {}
+    for item in omissions or []:
+        k = omission_key(item.get("dimension", ""))
+        if k and k not in notes_by_key:
+            notes_by_key[k] = (item.get("note") or "").strip()
+    rows = []
+    for key, (label, color) in CATEGORY_STYLE.items():
+        note = notes_by_key.get(key)
+        if note:
+            note_html = f'<span class="note">{escape(note)}</span>'
+            row_cls = "followup missing"
+        else:
+            note_html = ""
+            row_cls = "followup covered"
+        rows.append(
+            f'<li class="{row_cls}" style="border-left-color: {color};">'
+            f'<span class="dim" style="color: {color};">{label}</span>'
+            f'{note_html}</li>'
+        )
+    followups_html = '<ul class="followups">' + "".join(rows) + "</ul>"
 
     if conflicts:
         cards = []

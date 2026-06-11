@@ -48,8 +48,9 @@ verification discards candidates, detection runs again told not to re-propose th
 ### Missing-information categories
 
 `find_omissions` checks the reports against a fixed set of six categories, one per
-question in the who/what/where/why/when/how convention. The report lists only the
-categories that no report covered, each shown with its own muted color:
+question in the who/what/where/why/when/how convention. The report always lists all six,
+each with its own muted color; a category that no report covered carries a follow-up note,
+and the ones the reports did cover are left blank:
 
 | Category | Label                          | Color     |
 |----------|--------------------------------|-----------|
@@ -71,6 +72,7 @@ Witnesses fold into WHO. The category keys, labels, and colors are fixed in code
 | POST   | `/incidents`          | Store reports, run the pipeline, return the result |
 | GET    | `/incidents/{id}`     | Return the incident, its reports, and its result   |
 | GET    | `/incidents/{id}/pdf` | Return the full report PDF (cover, summary, follow-ups, account discrepancies, officer reports) |
+| DELETE | `/incidents/{id}`     | Delete the incident and its reports and result     |
 
 ## Deploy (GCP)
 
