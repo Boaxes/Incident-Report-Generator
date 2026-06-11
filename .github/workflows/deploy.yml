@@ -1,0 +1,56 @@
+name: Deploy to Cloud Run
+
+# Continuous deployment: on every push to main, build both services from source with
+# Cloud Build and deploy them to Cloud Run. The OpenAI key lives in Secret Manager and is
+# referenced by name, so it is never stored in GitHub.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: ${{ vars.GCP_PROJECT }}
+  REGION: ${{ vars.GCP_REGION }}
+  CLOUD_SQL_CONNECTION: ${{ vars.CLOUD_SQL_CONNECTION }}
+  DB_NAME: ${{ vars.DB_NAME }}
+  DB_USER: ${{ vars.DB_USER }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy API
+        run: |
+          gcloud run deploy incident-api \
+            --source ./api \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --allow-unauthenticated \
+            --add-cloudsql-instances "$CLOUD_SQL_CONNECTION" \
+            --set-env-vars "INSTANCE_CONNECTION_NAME=$CLOUD_SQL_CONNECTION,DB_NAME=$DB_NAME,DB_USER=$DB_USER" \
+            --set-secrets "OPENAI_API_KEY=openai-api-key:latest,DB_PASSWORD=db-password:latest"
+
+      - name: Get API URL
+        id: api_url
+        run: |
+          url=$(gcloud run services describe incident-api --project "$PROJECT_ID" --region "$REGION" --format 'value(status.url)')
+          echo "API_URL=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy UI
+        run: |
+          gcloud run deploy incident-ui \
+            --source ./ui \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --allow-unauthenticated \
+            --set-env-vars "API_URL=${{ steps.api_url.outputs.API_URL }}"
