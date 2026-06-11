@@ -52,12 +52,7 @@ def dashboard():
         st.title("Incident Reports")
     with right:
         st.write("")
-        st.button("➕ Add new incident", on_click=go_new, type="primary", use_container_width=True)
-
-    st.caption(
-        "Each incident bundles the guards' accounts and one supervisor-ready report: a "
-        "summary, likely-missing details to follow up on, and where the accounts conflict."
-    )
+        st.button("New incident", on_click=go_new, type="primary", use_container_width=True)
 
     try:
         response = httpx.get(f"{API_URL}/incidents", timeout=30)
@@ -67,15 +62,18 @@ def dashboard():
         st.error("Could not reach the API.")
 
     if not incidents:
-        st.info("No incidents yet. Click **Add new incident** to create one.")
+        st.info("No incidents yet. Click **New incident** to create one.")
         return
 
-    for inc in incidents:
+    # The list is newest-first, so number them so the oldest reads as #1.
+    total = len(incidents)
+    for i, inc in enumerate(incidents):
+        seq = total - i
         with st.container(border=True):
             info, action = st.columns([5, 1])
             with info:
                 st.subheader(inc["title"] or "Untitled incident")
-                st.caption(f"Incident #{inc['incident_id']}  ·  Created {format_date(inc['created_at'])}")
+                st.caption(f"Incident #{seq}  ·  Created {format_date(inc['created_at'])}")
             with action:
                 st.write("")
                 st.button(
@@ -87,40 +85,57 @@ def dashboard():
                 )
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def fetch_incident(incident_id):
+    response = httpx.get(f"{API_URL}/incidents/{incident_id}", timeout=60)
+    if response.status_code != 200:
+        return None
+    return response.json()
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def fetch_pdf(incident_id):
+    response = httpx.get(f"{API_URL}/incidents/{incident_id}/pdf", timeout=60)
+    if response.status_code != 200:
+        return None
+    return response.content
+
+
 def detail():
     st.button("← Back to dashboard", on_click=go_list)
     incident_id = st.session_state.selected_id
-    try:
-        response = httpx.get(f"{API_URL}/incidents/{incident_id}", timeout=60)
-    except Exception:
-        st.error("Could not reach the API.")
-        return
-    if response.status_code != 200:
-        st.error(f"Could not load incident #{incident_id}.")
-        return
 
-    data = response.json()
+    with st.spinner("Loading incident..."):
+        try:
+            data = fetch_incident(incident_id)
+        except Exception:
+            st.error("Could not reach the API.")
+            return
+        if data is None:
+            st.error(f"Could not load incident #{incident_id}.")
+            return
+        try:
+            pdf_bytes = fetch_pdf(incident_id)
+        except Exception:
+            pdf_bytes = None
+
     st.title(data["title"] or "Untitled incident")
 
-    try:
-        pdf_response = httpx.get(f"{API_URL}/incidents/{incident_id}/pdf", timeout=60)
-    except Exception:
-        pdf_response = None
-    if pdf_response is not None and pdf_response.status_code == 200:
+    st.subheader("Guard accounts")
+    for report in data["reports"]:
+        with st.expander(report["label"]):
+            st.write(report["body"])
+
+    if pdf_bytes is not None:
         st.download_button(
-            "⬇ Download report PDF",
-            data=pdf_response.content,
+            "Download Report PDF",
+            data=pdf_bytes,
             file_name=f"incident_{incident_id}.pdf",
             mime="application/pdf",
             type="primary",
         )
     else:
         st.error("Report PDF is not available yet.")
-
-    st.subheader("Guard accounts")
-    for report in data["reports"]:
-        with st.expander(report["label"]):
-            st.write(report["body"])
 
 
 def new_incident():

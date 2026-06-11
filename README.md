@@ -1,29 +1,31 @@
 # Incident Report Generator
 
 Guards write their own accounts of the same security incident; this tool produces one
-supervisor-ready report — a summary of what happened, a list of likely-missing details to
+supervisor-ready report - a summary of what happened, a list of likely-missing details to
 follow up on, and the points where the accounts conflict. The report exports to PDF.
 
 The UI is a dashboard: it lists every incident, each opens to its guard accounts and a
-**Download report PDF** button, and **Add new incident** posts fresh guard accounts to the
-pipeline. The report itself is delivered as the PDF — there is no on-screen rendering of
+**Download Report PDF** button, and **New incident** posts fresh guard accounts to the
+pipeline. The report itself is delivered as the PDF - there is no on-screen rendering of
 it. Analysis is generated once when the incident is created and stored; opening an incident
 reuses the saved result rather than re-running the pipeline. A few sample incidents are
 seeded into an empty database on first startup so the dashboard is not blank.
 
-The PDF is a styled, corporate-banded document rendered from HTML/CSS by **WeasyPrint**
-(see `api/report_pdf.py`); the API Docker image installs the Pango/Cairo libraries and
-fonts WeasyPrint needs.
+The PDF is a clean, black-and-white document rendered from HTML/CSS by **WeasyPrint**
+(see `api/report_pdf.py`): a cover page with a table of contents, then the summary,
+follow-ups, conflicts, and the raw officer reports, each on its own page. The only color is
+in the missing-information section, where the six categories are color-coded. The API
+Docker image installs the Pango/Cairo libraries and fonts WeasyPrint needs.
 
 **Live demo:** https://incident-ui-328698967588.us-central1.run.app
-(Open a seeded sample incident, or click **Add new incident** to enter your own.)
+(Open a seeded sample incident, or click **New incident** to enter your own.)
 
 ## Stack
 
-- **Streamlit** UI (dashboard, always light theme) — calls the API only.
-- **FastAPI** — the endpoints, the LangGraph analysis pipeline, and the WeasyPrint PDF builder.
-- **Postgres** — stores incidents, reports, and results.
-- **OpenAI** — the LLM behind the pipeline.
+- **Streamlit** UI (dashboard, always light theme) - calls the API only.
+- **FastAPI** - the endpoints, the LangGraph analysis pipeline, and the WeasyPrint PDF builder.
+- **Postgres** - stores incidents, reports, and results.
+- **OpenAI** - the LLM behind the pipeline.
 
 ## Run locally
 
@@ -35,13 +37,31 @@ fonts WeasyPrint needs.
 
 A LangGraph graph in `api/pipeline.py` with four nodes:
 
-1. `summarize` — writes the summary from the reports only.
-2. `find_omissions` — flags standard incident dimensions that no report covered.
-3. `detect_conflicts` — proposes candidate conflicts with exact quotes.
-4. `verify_conflicts` — drops wording-only differences, keeps real contradictions.
+1. `summarize` - writes the summary from the reports only.
+2. `find_omissions` - flags which of the six fixed categories (below) no report covered.
+3. `detect_conflicts` - proposes candidate conflicts with exact quotes.
+4. `verify_conflicts` - drops wording-only differences, keeps real contradictions.
 
 `detect_conflicts` and `verify_conflicts` form a bounded loop (max two iterations): if
 verification discards candidates, detection runs again told not to re-propose them.
+
+### Missing-information categories
+
+`find_omissions` checks the reports against a fixed set of six categories, one per
+question in the who/what/where/why/when/how convention. The report lists only the
+categories that no report covered, each shown with its own muted color:
+
+| Category | Label                          | Color     |
+|----------|--------------------------------|-----------|
+| who      | SUBJECT / PERSON DESCRIPTION    | `#B0564A` |
+| what     | WHAT HAPPENED                   | `#C07A3E` |
+| where    | LOCATION                        | `#9A8A3C` |
+| why      | REASON / MOTIVE                 | `#4F7A5A` |
+| when     | TIME OF INCIDENT                | `#4A6E92` |
+| how      | RESPONSE & OUTCOME              | `#6E5A82` |
+
+Witnesses fold into WHO. The category keys, labels, and colors are fixed in code
+(`api/pipeline.py` and `api/report_pdf.py`), so the section is deterministic.
 
 ## API
 
@@ -50,7 +70,7 @@ verification discards candidates, detection runs again told not to re-propose th
 | GET    | `/incidents`          | List incidents (id, title, created_at) for the dashboard |
 | POST   | `/incidents`          | Store reports, run the pipeline, return the result |
 | GET    | `/incidents/{id}`     | Return the incident, its reports, and its result   |
-| GET    | `/incidents/{id}/pdf` | Return the three-section report as a PDF            |
+| GET    | `/incidents/{id}/pdf` | Return the full report PDF (cover, summary, follow-ups, conflicts, officer reports) |
 
 ## Deploy (GCP)
 
@@ -67,7 +87,7 @@ Current deployment (project `project-d481c97a-382d-4d71-9f4`, region `us-central
 ## Continuous deployment (GitHub Actions)
 
 `.github/workflows/deploy.yml` redeploys both services on every push to `main`. Auth is
-**keyless** via Workload Identity Federation — no service-account key is stored in GitHub
+**keyless** via Workload Identity Federation - no service-account key is stored in GitHub
 (the project disables SA-key creation by org policy). Wire it up by adding these to the
 GitHub repository:
 
@@ -89,7 +109,7 @@ No repository secrets are required. The workflow requests an OIDC token (`id-tok
 and federates into the deployer SA; the provider is scoped to this repo by an attribute
 condition, and the SA grants `roles/iam.workloadIdentityUser` only to this repo's
 principalSet. The OpenAI key and DB password are read from Secret Manager
-(`openai-api-key`, `db-password`) — they are never stored in GitHub.
+(`openai-api-key`, `db-password`) - they are never stored in GitHub.
 
 One-time WIF setup (already provisioned for this project):
 

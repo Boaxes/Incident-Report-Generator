@@ -128,8 +128,19 @@ def get_incident_pdf(incident_id: int):
         if row is None:
             raise HTTPException(status_code=404, detail="Incident not found")
         title, created_at = row
-        cur.execute("SELECT count(*) FROM reports WHERE incident_id = %s", (incident_id,))
-        account_count = cur.fetchone()[0]
+        # Sequential display number (oldest incident is #1), matching the dashboard.
+        cur.execute(
+            "SELECT count(*) FROM incidents WHERE created_at < %s "
+            "OR (created_at = %s AND id <= %s)",
+            (created_at, created_at, incident_id),
+        )
+        display_number = cur.fetchone()[0]
+        cur.execute(
+            "SELECT label, body FROM reports WHERE incident_id = %s ORDER BY id",
+            (incident_id,),
+        )
+        reports = [{"label": label, "body": body} for label, body in cur.fetchall()]
+        account_count = len(reports)
         cur.execute(
             "SELECT summary, omissions, conflicts FROM results WHERE incident_id = %s "
             "ORDER BY id DESC LIMIT 1",
@@ -144,9 +155,10 @@ def get_incident_pdf(incident_id: int):
         summary,
         omissions,
         conflicts,
-        incident_id=incident_id,
+        incident_id=display_number,
         created_at=created_at.strftime("%b %d, %Y") if created_at else None,
         account_count=account_count,
+        reports=reports,
     )
     return Response(
         content=pdf_bytes,

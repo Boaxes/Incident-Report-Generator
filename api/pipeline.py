@@ -8,16 +8,18 @@ from langgraph.graph import StateGraph, START, END
 client = OpenAI()
 MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
 
-# The fixed dimensions a complete incident account should cover (spec section 3).
-DIMENSIONS = [
-    "subject / person description",
-    "time of the incident",
-    "location",
-    "what happened (the action)",
-    "actions the guards took",
-    "outcome / how it ended",
-    "witnesses",
+# The fixed dimensions a complete incident account should cover, organized by the
+# who/what/where/why/when/how convention (spec section 3). Each category has a stable key
+# (returned by the model) and a human label; the PDF maps the key to a label and color.
+CATEGORIES = [
+    ("who", "SUBJECT / PERSON DESCRIPTION"),
+    ("what", "WHAT HAPPENED"),
+    ("where", "LOCATION"),
+    ("why", "REASON / MOTIVE"),
+    ("when", "TIME OF INCIDENT"),
+    ("how", "RESPONSE & OUTCOME"),
 ]
+CATEGORY_KEYS = [key for key, _ in CATEGORIES]
 
 
 class State(TypedDict):
@@ -71,19 +73,25 @@ def summarize(state: State) -> State:
 
 def find_omissions(state: State) -> State:
     system = (
-        "You check security incident reports for missing information. You are given a "
-        "fixed list of dimensions a complete account should cover. Go through the "
-        "dimensions one at a time and, for each, decide whether ANY report addresses it "
-        "even partially. Flag a dimension ONLY if NONE of the reports addresses it at "
-        "all; if even one report covers it, it is not missing. Be precise: a specific "
-        "time of the incident, a location, or a description of the subject counts as "
-        "covered only if a report actually states it. Respond with JSON of the form "
-        '{"omissions": [{"dimension": "<one of the listed dimensions>", "note": '
-        '"<short note on what is missing>"}]}. Return an empty list if every dimension '
-        "is addressed by at least one report."
+        "You check security incident reports for missing information. A complete account "
+        "covers six fixed categories, by the who/what/where/why/when/how convention:\n"
+        "- who: a description of the subject(s) and any witnesses involved.\n"
+        "- what: what actually happened (the action or event).\n"
+        "- where: the location of the incident.\n"
+        "- why: the reason, cause, or motive for the incident.\n"
+        "- when: the time of the incident.\n"
+        "- how: the response the guards took and the outcome / how it ended.\n"
+        "Go through the six categories one at a time and, for each, decide whether ANY "
+        "report addresses it even partially. Flag a category ONLY if NONE of the reports "
+        "addresses it at all; if even one report covers it, it is not missing. Be precise: "
+        "a specific time, a location, or a subject description counts as covered only if a "
+        "report actually states it. Respond with JSON of the form "
+        '{"omissions": [{"dimension": "<one of: who, what, where, why, when, how>", '
+        '"note": "<short note on what is missing>"}]}. Use ONLY those six category keys. '
+        "Return an empty list if every category is addressed by at least one report."
     )
     user = (
-        "Dimensions:\n- " + "\n- ".join(DIMENSIONS) + "\n\n"
+        "Categories: " + ", ".join(CATEGORY_KEYS) + "\n\n"
         f"Guard reports:\n\n{reports_block(state['reports'])}"
     )
     try:
