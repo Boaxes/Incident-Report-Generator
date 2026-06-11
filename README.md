@@ -66,8 +66,10 @@ Current deployment (project `project-d481c97a-382d-4d71-9f4`, region `us-central
 
 ## Continuous deployment (GitHub Actions)
 
-`.github/workflows/deploy.yml` redeploys both services on every push to `main`. Wire it
-up by adding these to the GitHub repository:
+`.github/workflows/deploy.yml` redeploys both services on every push to `main`. Auth is
+**keyless** via Workload Identity Federation — no service-account key is stored in GitHub
+(the project disables SA-key creation by org policy). Wire it up by adding these to the
+GitHub repository:
 
 Repository **Variables**:
 
@@ -76,14 +78,32 @@ Repository **Variables**:
 - `CLOUD_SQL_CONNECTION` = `project-d481c97a-382d-4d71-9f4:us-central1:incident-db`
 - `DB_NAME` = `incidents`
 - `DB_USER` = `postgres`
+- `WIF_PROVIDER` = full resource name of the workload identity provider, e.g.
+  `projects/328698967588/locations/global/workloadIdentityPools/github-pool/providers/github-provider`
+- `DEPLOY_SA` = deployer service account email
+  (`github-cloud-run-deployer@project-d481c97a-382d-4d71-9f4.iam.gserviceaccount.com`),
+  with roles: Cloud Run Admin, Cloud Build Editor, Service Account User, Artifact Registry
+  Writer, Storage Admin, Cloud SQL Client.
 
-Repository **Secrets**:
+No repository secrets are required. The workflow requests an OIDC token (`id-token: write`)
+and federates into the deployer SA; the provider is scoped to this repo by an attribute
+condition, and the SA grants `roles/iam.workloadIdentityUser` only to this repo's
+principalSet. The OpenAI key and DB password are read from Secret Manager
+(`openai-api-key`, `db-password`) — they are never stored in GitHub.
 
-- `GCP_SA_KEY` = JSON key of a service account with roles: Cloud Run Admin, Cloud Build
-  Editor, Service Account User, Artifact Registry Writer, Secret Manager Secret Accessor.
+One-time WIF setup (already provisioned for this project):
 
-The OpenAI key and DB password are read from Secret Manager (`openai-api-key`,
-`db-password`) — they are never stored in GitHub.
+```
+gcloud iam workload-identity-pools create github-pool --location=global
+gcloud iam workload-identity-pools providers create-oidc github-provider \
+  --location=global --workload-identity-pool=github-pool \
+  --issuer-uri="https://token.actions.githubusercontent.com" \
+  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.repository_owner=assertion.repository_owner" \
+  --attribute-condition="assertion.repository=='Boaxes/Incident-Report-Generator'"
+gcloud iam service-accounts add-iam-policy-binding "$DEPLOY_SA" \
+  --role=roles/iam.workloadIdentityUser \
+  --member="principalSet://iam.googleapis.com/projects/328698967588/locations/global/workloadIdentityPools/github-pool/attribute.repository/Boaxes/Incident-Report-Generator"
+```
 
 ## Operations
 
