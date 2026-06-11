@@ -13,7 +13,7 @@ seeded into an empty database on first startup so the dashboard is not blank.
 
 The PDF is a clean, black-and-white document rendered from HTML/CSS by **WeasyPrint**
 (see `api/report_pdf.py`): a cover page with a table of contents, then the summary,
-follow-ups, conflicts, and the raw officer reports, each on its own page. The only color is
+follow-ups, account discrepancies, and the raw officer reports, each on its own page. The only color is
 in the missing-information section, where the six categories are color-coded. The API
 Docker image installs the Pango/Cairo libraries and fonts WeasyPrint needs.
 
@@ -70,7 +70,7 @@ Witnesses fold into WHO. The category keys, labels, and colors are fixed in code
 | GET    | `/incidents`          | List incidents (id, title, created_at) for the dashboard |
 | POST   | `/incidents`          | Store reports, run the pipeline, return the result |
 | GET    | `/incidents/{id}`     | Return the incident, its reports, and its result   |
-| GET    | `/incidents/{id}/pdf` | Return the full report PDF (cover, summary, follow-ups, conflicts, officer reports) |
+| GET    | `/incidents/{id}/pdf` | Return the full report PDF (cover, summary, follow-ups, account discrepancies, officer reports) |
 
 ## Deploy (GCP)
 

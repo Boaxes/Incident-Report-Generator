@@ -115,6 +115,15 @@ ol.toc a::after {
     content: leader('.') target-counter(attr(href), page);
     color: #6b7280;
 }
+ol.toc-sub {
+    list-style: none;
+    padding-left: 16px;
+    margin: 9px 0 2px 0;
+    font-size: 10pt;
+    color: #4a5566;
+}
+ol.toc-sub li { margin-bottom: 7px; padding-left: 0; }
+ol.toc-sub a { color: #4a5566; }
 
 /* --- Section headings --- */
 h2.section {
@@ -151,14 +160,7 @@ ul.followups .dim {
 ul.followups .note { display: block; color: #2a3342; }
 .allgood { color: #4a5566; font-style: italic; }
 
-.review-note {
-    font-size: 9pt;
-    color: #6b7588;
-    font-style: italic;
-    margin: -2px 0 14px 0;
-}
-
-/* --- Conflicts --- */
+/* --- Account discrepancies --- */
 .conflict {
     border: 1px solid #cccccc;
     border-radius: 7px;
@@ -254,15 +256,26 @@ def build_pdf(title, summary, omissions, conflicts, incident_id=None, created_at
             )
         conflicts_html = "".join(cards)
     else:
-        conflicts_html = '<p class="allgood">No genuine conflicts were found between the reports.</p>'
+        conflicts_html = '<p class="allgood">No discrepancies were found between the accounts.</p>'
 
+    # Each officer report gets a stable anchor and starts on its own page (except the first,
+    # which shares the page with the section heading). The cover TOC sub-list reuses the
+    # same labels and order.
+    toc_reports = ""
     if reports:
         blocks = []
-        for report in reports:
+        toc_items = []
+        for i, report in enumerate(reports):
             label = escape(report.get("label", "") or "Unnamed officer")
             body = _paragraphs(report.get("body", "")) or "<p>No account provided.</p>"
-            blocks.append(f'<div class="report"><p class="label">{label}</p>{body}</div>')
+            cls = "report page-break" if i > 0 else "report"
+            blocks.append(
+                f'<div class="{cls}" id="report-{i}">'
+                f'<p class="label">{label}</p>{body}</div>'
+            )
+            toc_items.append(f'<li><a href="#report-{i}">{label}</a></li>')
         reports_html = "".join(blocks)
+        toc_reports = '<ol class="toc-sub">' + "".join(toc_items) + "</ol>"
     else:
         reports_html = '<p class="allgood">No officer reports are on file for this incident.</p>'
 
@@ -279,8 +292,8 @@ def build_pdf(title, summary, omissions, conflicts, incident_id=None, created_at
         <ol class="toc">
             <li><a href="#summary">Summary</a></li>
             <li><a href="#followups">Follow-ups / Missing Information</a></li>
-            <li><a href="#conflicts">Conflicts</a></li>
-            <li><a href="#reports">Officer Reports</a></li>
+            <li><a href="#conflicts">Account Discrepancies</a></li>
+            <li><a href="#reports">Officer Reports</a>{toc_reports}</li>
         </ol>
     </div>
 
@@ -295,8 +308,7 @@ def build_pdf(title, summary, omissions, conflicts, incident_id=None, created_at
     </section>
 
     <section id="conflicts" class="page-break">
-        <h2 class="section">Conflicts</h2>
-        <p class="review-note">These are points for the team to review, not findings of wrongdoing.</p>
+        <h2 class="section">Account Discrepancies</h2>
         {conflicts_html}
     </section>
 
