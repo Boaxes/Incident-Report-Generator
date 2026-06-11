@@ -4,13 +4,18 @@ Guards write their own accounts of the same security incident; this tool produce
 supervisor-ready report — a summary of what happened, a list of likely-missing details to
 follow up on, and the points where the accounts conflict. The report exports to PDF.
 
+The UI is a dashboard: it lists every incident, each opens to its saved report, and
+**Add new incident** posts fresh guard accounts to the pipeline. The report is generated
+once when the incident is created and stored — opening an incident reads the saved report
+rather than re-running the analysis. A few sample incidents are seeded into an empty
+database on first startup so the dashboard is not blank.
+
 **Live demo:** https://incident-ui-328698967588.us-central1.run.app
-(Pick one of the four built-in sample incidents and click **Generate report** — no setup
-needed.)
+(Open a seeded sample incident, or click **Add new incident** to enter your own.)
 
 ## Stack
 
-- **Streamlit** UI (one page) — calls the API only.
+- **Streamlit** UI (dashboard, always light theme) — calls the API only.
 - **FastAPI** — three endpoints, the LangGraph analysis pipeline, and the PDF builder.
 - **Postgres** — stores incidents, reports, and results.
 - **OpenAI** — the LLM behind the pipeline.
@@ -37,6 +42,7 @@ verification discards candidates, detection runs again told not to re-propose th
 
 | Method | Path                  | Purpose                                            |
 |--------|-----------------------|----------------------------------------------------|
+| GET    | `/incidents`          | List incidents (id, title, created_at) for the dashboard |
 | POST   | `/incidents`          | Store reports, run the pipeline, return the result |
 | GET    | `/incidents/{id}`     | Return the incident, its reports, and its result   |
 | GET    | `/incidents/{id}/pdf` | Return the three-section report as a PDF            |

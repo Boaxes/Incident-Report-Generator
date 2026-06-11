@@ -56,8 +56,10 @@ def summarize(state: State) -> State:
         "information explicitly stated in the guard reports. Do not invent, infer, or "
         "add any detail that is not written in a report. Where the guards agree, state "
         "the fact plainly; where only some mention something, you may still include it. "
-        "Write one or two short plain-language paragraphs. Do not list missing "
-        "information or disagreements here."
+        "Write a thorough, plain-language narrative of two to four paragraphs that "
+        "captures who was involved, what happened, when and where it occurred, the "
+        "actions the guards took, and how it was resolved, using only what the reports "
+        "state. Do not list missing information or disagreements here."
     )
     user = f"Guard reports:\n\n{reports_block(state['reports'])}\n\nWrite the summary."
     try:

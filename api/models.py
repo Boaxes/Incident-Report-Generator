@@ -16,6 +16,12 @@ class ReportOut(BaseModel):
     body: str
 
 
+class IncidentSummary(BaseModel):
+    incident_id: int
+    title: str
+    created_at: str
+
+
 class IncidentResult(BaseModel):
     incident_id: int
     summary: str

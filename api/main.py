@@ -1,3 +1,4 @@
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Response
@@ -5,34 +6,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from psycopg.types.json import Json
 
 from db import get_connection, init_db
-from models import IncidentCreate, IncidentResult, IncidentDetail
+from models import IncidentCreate, IncidentResult, IncidentDetail, IncidentSummary
 from pipeline import run_pipeline
 from report_pdf import build_pdf
+from seed import SAMPLES
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    init_db()
-    yield
-
-
-app = FastAPI(title="Incident Report Generator", lifespan=lifespan)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
-@app.post("/incidents", response_model=IncidentResult)
-def create_incident(incident: IncidentCreate):
-    reports = [{"label": r.label, "body": r.body} for r in incident.reports]
-    result = run_pipeline(reports)
+def store_incident(title, reports, result):
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
-            "INSERT INTO incidents (title) VALUES (%s) RETURNING id", (incident.title,)
+            "INSERT INTO incidents (title) VALUES (%s) RETURNING id", (title,)
         )
         incident_id = cur.fetchone()[0]
         for r in reports:
@@ -46,6 +29,62 @@ def create_incident(incident: IncidentCreate):
             (incident_id, result["summary"], Json(result["omissions"]), Json(result["conflicts"])),
         )
         conn.commit()
+    return incident_id
+
+
+def seed_samples():
+    # Generate and store the sample incidents once, only if the database is empty.
+    # Runs in a background thread so it never blocks the server from coming up.
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute("SELECT count(*) FROM incidents")
+            if cur.fetchone()[0] > 0:
+                return
+    except Exception:
+        return
+    for sample in SAMPLES:
+        try:
+            result = run_pipeline(sample["reports"])
+            store_incident(sample["title"], sample["reports"], result)
+        except Exception:
+            continue
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    threading.Thread(target=seed_samples, daemon=True).start()
+    yield
+
+
+app = FastAPI(title="Incident Report Generator", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.get("/incidents", response_model=list[IncidentSummary])
+def list_incidents():
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, title, created_at FROM incidents ORDER BY created_at DESC, id DESC"
+        )
+        rows = cur.fetchall()
+    return [
+        IncidentSummary(incident_id=id, title=title, created_at=created_at.isoformat())
+        for id, title, created_at in rows
+    ]
+
+
+@app.post("/incidents", response_model=IncidentResult)
+def create_incident(incident: IncidentCreate):
+    reports = [{"label": r.label, "body": r.body} for r in incident.reports]
+    result = run_pipeline(reports)
+    incident_id = store_incident(incident.title, reports, result)
     return IncidentResult(incident_id=incident_id, **result)
 
 
